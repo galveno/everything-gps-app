@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPS Navigation App</title>
+    
+    <!-- Leaflet CSS for map rendering -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+     crossorigin=""/>
+     
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Leaflet JS for map functionality -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+     integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+     crossorigin=""></script>
+     
+    <style>
+        /* Set a specific height for the map container */
+        #map { 
+            height: 100%;
+            width: 100%;
+        }
+        /* Custom scrollbar for directions panel */
+        #directions-panel::-webkit-scrollbar {
+            width: 8px;
+        }
+        #directions-panel::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        #directions-panel::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 4px;
+        }
+        #directions-panel::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 font-sans antialiased">
+    <!-- Auth Container -->
+    <div id="auth-container" class="flex items-center justify-center h-screen w-screen">
+        <div class="w-full max-w-md bg-white p-8 rounded-lg shadow-md">
+            <h2 id="auth-title" class="text-2xl font-bold text-center text-gray-800 mb-2">Login</h2>
+            <p id="auth-subtitle" class="text-center text-gray-500 mb-6">Access your map and routes.</p>
+            <form id="auth-form">
+                <div class="mb-4">
+                    <label for="email" class="block text-sm font-medium text-gray-700">Email Address</label>
+                    <input type="email" id="email" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                </div>
+                <div class="mb-6">
+                    <label for="password" class="block text-sm font-medium text-gray-700">Password</label>
+                    <input type="password" id="password" required class="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm placeholder-gray-400 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                </div>
+                <button type="submit" id="auth-submit-btn" class="w-full flex justify-center py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                    Login
+                </button>
+            </form>
+            <p class="text-center text-sm text-gray-600 mt-4">
+                <a href="#" id="auth-toggle-link" class="font-medium text-indigo-600 hover:text-indigo-500">Don't have an account? Register</a>
+            </p>
+        </div>
+    </div>
+
+    <!-- Main App Container -->
+    <div id="app-container" class="relative hidden flex-col md:flex-row h-screen w-screen overflow-hidden">
+        
+        <!-- Sidebar for Controls and Directions -->
+        <div class="w-full md:w-96 bg-white shadow-lg z-10 flex flex-col">
+            <div class="p-4 border-b flex justify-between items-center">
+                <div>
+                    <h1 class="text-2xl font-bold text-gray-800">Navigation</h1>
+                    <p class="text-sm text-gray-500">Enter your destination to get directions.</p>
+                </div>
+                 <button id="logout-btn" class="px-3 py-1 border border-transparent text-sm font-medium rounded-md text-indigo-600 bg-indigo-100 hover:bg-indigo-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                    Logout
+                </button>
+            </div>
+            
+            <!-- Input Form -->
+            <div class="p-4 space-y-4">
+                <div>
+                    <label for="destination" class="block text-sm font-medium text-gray-700">Destination</label>
+                    <div class="mt-1 flex rounded-md shadow-sm">
+                        <input type="text" id="destination" name="destination" class="focus:ring-indigo-500 focus:border-indigo-500 flex-1 block w-full rounded-none rounded-l-md sm:text-sm border-gray-300 p-2" placeholder="e.g., Empire State Building">
+                        <button id="get-directions-btn" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-r-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                            Go
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- API Key Warning -->
+            <div id="api-key-warning" class="p-4 m-4 bg-red-100 border-l-4 border-red-500 text-red-700 hidden">
+                <p class="font-bold">Configuration Needed</p>
+                <p>Please add your Mapbox API key in the script to enable search and directions.</p>
+            </div>
+
+            <!-- Loading Spinner -->
+            <div id="loader" class="text-center p-4 hidden">
+                <svg class="animate-spin h-8 w-8 text-indigo-600 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <p class="mt-2 text-sm text-gray-600">Calculating route...</p>
+            </div>
+            
+            <!-- Directions Panel -->
+            <div id="directions-panel" class="flex-grow p-4 overflow-y-auto">
+                <p class="text-gray-500 text-center">Your turn-by-turn directions will appear here.</p>
+            </div>
+        </div>
+        
+        <!-- Map Container -->
+        <div class="flex-grow h-full w-full">
+            <div id="map"></div>
+        </div>
+
+    </div>
+
+    <!-- Message Popup -->
+    <div id="message-box" class="hidden fixed top-5 right-5 z-50 max-w-sm p-4 rounded-lg shadow-xl text-white transition-opacity duration-300">
+        <p id="message-text"></p>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+
+        // --- CONFIGURATION ---
+        // IMPORTANT: Replace with your actual Firebase project configuration.
+        // You can get this from the Firebase console > Project settings.
+        const firebaseConfig = {
+            apiKey: "pk.eyJ1IjoiZ2FsdmVubyIsImEiOiJjbWdjZXRxa3gwb3FpMmtwbWpyMmhwc3hxIn0.SPNWbP6ReaQ3uxO8is6Kbg",
+            authDomain: "YOUR_AUTH_DOMAIN",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_STORAGE_BUCKET",
+            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
+
+        // IMPORTANT: Replace "pk.eyJ1IjoiZ2FsdmVubyIsImEiOiJjbWdjZXRxa3gwb3FpMmtwbWpyMmhwc3hxIn0.SPNWbP6ReaQ3uxO8is6Kbg" with your actual Mapbox API key.
+        // The core navigation features still require this key after you log in.
+        const MAPBOX_API_KEY = "pk.eyJ1IjoiZ2FsdmVubyIsImEiOiJjbWdjZXRxa3gwb3FpMmtwbWpyMmhwc3hxIn0.SPNWbP6ReaQ3uxO8is6Kbg"; 
+
+        // --- Firebase Initialization ---
+        let app, auth;
+        try {
+            app = initializeApp(firebaseConfig);
+            auth = getAuth(app);
+        } catch (error) {
+            console.error("Firebase initialization error:", error);
+            // Can't use showMessage yet as it's not defined, alert is fallback for critical init error
+            alert("Could not initialize the application. Please check the Firebase config in the code.");
+        }
+        
+        // --- DOM Elements ---
+        const authContainer = document.getElementById('auth-container');
+        const appContainer = document.getElementById('app-container');
+        const authForm = document.getElementById('auth-form');
+        const emailInput = document.getElementById('email');
+        const passwordInput = document.getElementById('password');
+        const authSubmitBtn = document.getElementById('auth-submit-btn');
+        const authToggleLink = document.getElementById('auth-toggle-link');
+        const authTitle = document.getElementById('auth-title');
+        const authSubtitle = document.getElementById('auth-subtitle');
+        const logoutBtn = document.getElementById('logout-btn');
+
+        const messageBox = document.getElementById('message-box');
+        const messageText = document.getElementById('message-text');
+
+        const destinationInput = document.getElementById('destination');
+        const getDirectionsBtn = document.getElementById('get-directions-btn');
+        const directionsPanel = document.getElementById('directions-panel');
+        const loader = document.getElementById('loader');
+        const apiKeyWarning = document.getElementById('api-key-warning');
+
+        // --- State ---
+        let isRegisterMode = false;
+        let map;
+        let userMarker;
+        let routeLayer;
+        let userLocation = null; // To store {lat, lng}
+
+        // --- UI Helper Functions ---
+        function showMessage(message, isError = true) {
+            messageText.textContent = message;
+            messageBox.className = `fixed top-5 right-5 z-50 max-w-sm p-4 rounded-lg shadow-xl text-white transition-opacity duration-300 ${isError ? 'bg-red-500' : 'bg-green-500'}`;
+            messageBox.classList.remove('hidden');
+
+            setTimeout(() => {
+                messageBox.classList.add('hidden');
+            }, 4000);
+        }
+
+        function toggleAuthMode() {
+            isRegisterMode = !isRegisterMode;
+            authTitle.textContent = isRegisterMode ? 'Register' : 'Login';
+            authSubtitle.textContent = isRegisterMode ? 'Create a new account.' : 'Access your map and routes.';
+            authSubmitBtn.textContent = isRegisterMode ? 'Register' : 'Login';
+            authToggleLink.innerHTML = isRegisterMode ? 'Already have an account? Login' : "Don't have an account? Register";
+            authForm.reset();
+        }
+
+        // --- Authentication ---
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                // User is signed in
+                authContainer.classList.add('hidden');
+                appContainer.classList.remove('hidden');
+                appContainer.classList.add('flex'); // re-apply flex display
+                
+                // Initialize the map and user location only after login
+                if (MAPBOX_API_KEY === "pk.eyJ1IjoiZ2FsdmVubyIsImEiOiJjbWdjZXRxa3gwb3FpMmtwbWpyMmhwc3hxIn0.SPNWbP6ReaQ3uxO8is6Kbg") {
+                    apiKeyWarning.classList.remove('hidden');
+                    getDirectionsBtn.disabled = true;
+                    getDirectionsBtn.classList.add('opacity-50', 'cursor-not-allowed');
+                }
+                
+                if(!map) { // Prevent re-initialization
+                    initializeMap();
+                    locateUser();
+                }
+
+            } else {
+                // User is signed out
+                authContainer.classList.remove('hidden');
+                appContainer.classList.add('hidden');
+                appContainer.classList.remove('flex');
+
+                // Clean up map state on logout to ensure a fresh start
+                if (map) {
+                    map.remove();
+                    map = null;
+                    userMarker = null;
+                    routeLayer = null;
+                    userLocation = null;
+                    directionsPanel.innerHTML = '<p class="text-gray-500 text-center">Your turn-by-turn directions will appear here.</p>';
+                    destinationInput.value = '';
+                }
+            }
+        });
+
+        async function handleAuthSubmit(e) {
+            e.preventDefault();
+            const email = emailInput.value;
+            const password = passwordInput.value;
+
+            if (!email || !password) {
+                showMessage("Please enter both email and password.", true);
+                return;
+            }
+
+            try {
+                if (isRegisterMode) {
+                    await createUserWithEmailAndPassword(auth, email, password);
+                    showMessage("Registration successful! You are now logged in.", false);
+                } else {
+                    await signInWithEmailAndPassword(auth, email, password);
+                    showMessage("Login successful!", false);
+                }
+            } catch (error) {
+                console.error("Authentication error:", error.code, error.message);
+                showMessage(error.message, true);
+            }
+        }
+        
+        async function handleLogout() {
+            try {
+                await signOut(auth);
+                showMessage("You have been logged out.", false);
+            } catch (error) {
+                console.error("Logout error:", error);
+                showMessage(error.message, true);
+            }
+        }
+
+        // --- Map Initialization ---
+        function initializeMap(center = [40.7128, -74.0060]) { // Default to NYC
+            map = L.map('map').setView(center, 13);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 19,
+                attribution: '© <a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+            }).addTo(map);
+        }
+
+        // --- Geolocation ---
+        function locateUser() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        const { latitude, longitude } = position.coords;
+                        userLocation = { lat: latitude, lng: longitude };
+                        
+                        if (!map) {
+                            initializeMap([latitude, longitude]);
+                        } else {
+                            map.setView([latitude, longitude], 15);
+                        }
+
+                        // Add or update user marker
+                        if (userMarker) {
+                            userMarker.setLatLng([latitude, longitude]);
+                        } else {
+                            const userIcon = L.divIcon({
+                                html: `<div class="w-4 h-4 bg-blue-500 rounded-full border-2 border-white shadow-md"></div>`,
+                                className: '',
+                                iconSize: [16, 16],
+                                iconAnchor: [8, 8]
+                            });
+                            userMarker = L.marker([latitude, longitude], { icon: userIcon }).addTo(map);
+                        }
+                        userMarker.bindPopup("<b>You are here</b>").openPopup();
+                    },
+                    (error) => {
+                        console.error("Geolocation error:", error);
+                        // Initialize map with default location if user denies permission
+                        if (!map) initializeMap();
+                        showMessage("Could not get your location. Please allow location access.");
+                    },
+                    { enableHighAccuracy: true }
+                );
+            } else {
+                console.error("Geolocation is not supported by this browser.");
+                if (!map) initializeMap();
+                showMessage("Geolocation is not supported by your browser.");
+            }
+        }
+        
+        // --- Routing Functionality ---
+        async function getDirections() {
+            const destination = destinationInput.value;
+            if (!destination) {
+                showMessage("Please enter a destination.");
+                return;
+            }
+            if (!userLocation) {
+                showMessage("Could not determine your current location. Please enable location services.");
+                return;
+            }
+
+            // Show loader, clear previous results
+            loader.classList.remove('hidden');
+            directionsPanel.innerHTML = '';
+            if (routeLayer) {
+                map.removeLayer(routeLayer);
+            }
+
+            try {
+                // The API call requires coordinates in 'longitude,latitude' format
+                const startCoords = `${userLocation.lng},${userLocation.lat}`;
+                
+                // 1. Geocode destination to get coordinates
+                const geocodeUrl = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(destination)}.json?access_token=${MAPBOX_API_KEY}&proximity=${userLocation.lng},${userLocation.lat}`;
+                const geocodeResponse = await fetch(geocodeUrl);
+                const geocodeData = await geocodeResponse.json();
+                
+                if (!geocodeData.features || geocodeData.features.length === 0) {
+                    throw new Error("Destination not found.");
+                }
+
+                const endCoordsArray = geocodeData.features[0].center; // [lng, lat]
+                const endCoords = `${endCoordsArray[0]},${endCoordsArray[1]}`;
+                
+                // 2. Get directions using the coordinates
+                const directionsUrl = `https://api.mapbox.com/directions/v5/mapbox/driving/${startCoords};${endCoords}?steps=true&geometries=geojson&access_token=${MAPBOX_API_KEY}`;
+                
+                const directionsResponse = await fetch(directionsUrl);
+                const directionsData = await directionsResponse.json();
+
+                if (directionsData.routes && directionsData.routes.length > 0) {
+                    const route = directionsData.routes[0];
+                    displayRoute(route);
+                    displayDirections(route.legs[0].steps);
+                } else {
+                    throw new Error("No route found.");
+                }
+                
+            } catch (error) {
+                console.error("Error fetching directions:", error);
+                directionsPanel.innerHTML = `<p class="text-red-500 text-center">Error: ${error.message}</p>`;
+            } finally {
+                loader.classList.add('hidden');
+            }
+        }
+
+        // --- UI Display Functions ---
+        function displayRoute(route) {
+            const routeGeoJSON = route.geometry;
+            routeLayer = L.geoJSON(routeGeoJSON, {
+                style: {
+                    color: '#3b82f6', // A nice blue color
+                    weight: 6,
+                    opacity: 0.8
+                }
+            }).addTo(map);
+
+            // Fit map to the route bounds
+            map.fitBounds(routeLayer.getBounds(), { padding: [50, 50] });
+        }
+
+        function displayDirections(steps) {
+            let directionsHtml = '<ol class="space-y-3">';
+            steps.forEach(step => {
+                directionsHtml += `
+                    <li class="flex items-start p-2 bg-gray-50 rounded-md">
+                        <div class="flex-shrink-0 mr-3 mt-1">
+                           <span class="text-indigo-600 font-bold">${getManeuverIcon(step.maneuver)}</span>
+                        </div>
+                        <div>
+                            <p class="text-sm text-gray-800">${step.maneuver.instruction}</p>
+                            <p class="text-xs text-gray-500">${(step.distance / 1609.34).toFixed(1)} mi</p>
+                        </div>
+                    </li>
+                `;
+            });
+            directionsHtml += '</ol>';
+            directionsPanel.innerHTML = directionsHtml;
+        }
+
+        function getManeuverIcon(maneuver) {
+            // Simple mapping of maneuver types to text icons/emojis
+            switch (maneuver.type) {
+                case 'turn':
+                case 'fork':
+                case 'ramp':
+                    return `→ ${maneuver.modifier || ''}`;
+                case 'depart':
+                    return '↑';
+                case 'arrive':
+                    return '🏁';
+                default:
+                    return '•';
+            }
+        }
+        
+        // --- Event Listeners and Initial Setup ---
+        authForm.addEventListener('submit', handleAuthSubmit);
+        authToggleLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            toggleAuthMode();
+        });
+        logoutBtn.addEventListener('click', handleLogout);
+
+        getDirectionsBtn.addEventListener('click', getDirections);
+        destinationInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                getDirections();
+            }
+        });
+    </script>
+</body>
+</html>
+
